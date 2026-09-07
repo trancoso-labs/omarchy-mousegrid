@@ -26,6 +26,8 @@ require("hypr.mousegrid")
 """
 UINPUT = Path("/dev/uinput")
 SOCK = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "mousegrid-click.sock"
+GRID_CONFIG = HOME / ".config" / "omarchy" / "mousegrid.json"
+DEFAULT_GRID = {"cols": 6, "rows": 4, "fine": 12}
 
 
 def writable(path: Path) -> bool:
@@ -54,8 +56,43 @@ def bindings_wired() -> bool:
     return REQUIRE_LINE in BINDINGS.read_text(encoding="utf-8")
 
 
-def status() -> dict:
+def clamp_int(value, default, lo, hi) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(lo, min(hi, number))
+
+
+def load_grid() -> dict:
+    data = dict(DEFAULT_GRID)
+    if GRID_CONFIG.is_file():
+        try:
+            parsed = json.loads(GRID_CONFIG.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                data.update(parsed)
+        except (OSError, json.JSONDecodeError):
+            pass
     return {
+        "cols": clamp_int(data.get("cols"), 6, 2, 16),
+        "rows": clamp_int(data.get("rows"), 4, 2, 12),
+        "fine": clamp_int(data.get("fine"), 12, 4, 64),
+    }
+
+
+def save_grid(cols, rows, fine) -> dict:
+    data = {
+        "cols": clamp_int(cols, 6, 2, 16),
+        "rows": clamp_int(rows, 4, 2, 12),
+        "fine": clamp_int(fine, 12, 4, 64),
+    }
+    GRID_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    GRID_CONFIG.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return data
+
+
+def status() -> dict:
+    info = {
         "ok": True,
         "hypr_lua": HYPR_LUA_DST.is_file(),
         "click_bin": CLICK_DST.is_file() and os.access(CLICK_DST, os.X_OK),
@@ -63,6 +100,8 @@ def status() -> dict:
         "uinput": writable(UINPUT),
         "daemon": daemon_ok(),
     }
+    info.update(load_grid())
+    return info
 
 
 def ready(info: dict) -> bool:
@@ -99,8 +138,13 @@ def main() -> int:
         info["ready"] = ready(info)
         print(json.dumps(info))
         return 0
+    if args and args[0] == "set" and len(args) == 4:
+        data = save_grid(args[1], args[2], args[3])
+        data["ok"] = True
+        print(json.dumps(data))
+        return 0
     if args and args != ["install"]:
-        print("usage: install.py [status]", file=sys.stderr)
+        print("usage: install.py [status|set cols rows fine]", file=sys.stderr)
         return 2
     info = install()
     print(json.dumps(info, indent=2))

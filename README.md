@@ -15,8 +15,8 @@ Hyprland Lua plus a small `/dev/uinput` helper.
 
 | Key | Action |
 |-----|--------|
-| arrows | Jump cell to cell |
-| `SUPER` + arrows | Fine move (~12px) |
+| arrows | Jump cell to cell (size from the picker) |
+| `SUPER` + arrows | Fine move (step from the picker) |
 | `Enter` | Left click and leave |
 | `Space` (hold) | Hold left button — drag / select |
 | `SUPER` + `Space` | Same hold, so fine-aim and drag can overlap |
@@ -49,6 +49,10 @@ omarchy plugin enable 3v4ng3li0n00.mousegrid --section left
 
 `SUPER+A` is the default enter key. If that bind is already taken, unbind it
 in `bindings.lua` before requiring the loader.
+
+The bar icon opens a wallpaper-style overlay: one row for the coarse lattice
+(arrows) and one for the Super+arrows step. Sizes are saved to
+`~/.config/omarchy/mousegrid.json` and apply on the next `SUPER+A`.
 
 ## Requirements
 

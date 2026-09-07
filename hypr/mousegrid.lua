@@ -1,11 +1,13 @@
--- Keyboard pointer: 6x4 lattice on the focused window, no overlay.
+-- Keyboard pointer: lattice on the focused window, no drawn overlay.
 -- SUPER+A enters; arrows jump cells; SUPER+arrows nudge; Enter clicks and leaves.
 -- Space holds the left button (release = release; tap = click).
 -- SUPER+Space also holds, so fine aim and drag can overlap.
+-- Grid sizes live in ~/.config/omarchy/mousegrid.json (picker overlay).
 
-local COLS = 6
-local ROWS = 4
-local FINE = 12
+local DEFAULT_COLS = 6
+local DEFAULT_ROWS = 4
+local DEFAULT_FINE = 12
+local CONFIG = (os.getenv("HOME") or "") .. "/.config/omarchy/mousegrid.json"
 local CLICK = (os.getenv("HOME") or "") .. "/.local/bin/mousegrid-click"
 local FIFO = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/mousegrid-click.fifo"
 
@@ -16,6 +18,7 @@ local state = {
   bh = 0,
   cw = 0,
   ch = 0,
+  fine = 12,
   x = 0,
   y = 0,
 }
@@ -32,6 +35,23 @@ local function clamp(value, lo, hi)
     return hi
   end
   return value
+end
+
+local function config_number(raw, key, default, lo, hi)
+  local matched = raw:match('"' .. key .. '"%s*:%s*(%d+)')
+  return clamp(tonumber(matched) or default, lo, hi)
+end
+
+local function read_grid()
+  local file = io.open(CONFIG, "r")
+  if not file then
+    return DEFAULT_COLS, DEFAULT_ROWS, DEFAULT_FINE
+  end
+  local raw = file:read("*a") or ""
+  file:close()
+  return config_number(raw, "cols", DEFAULT_COLS, 2, 16),
+    config_number(raw, "rows", DEFAULT_ROWS, 2, 12),
+    config_number(raw, "fine", DEFAULT_FINE, 4, 64)
 end
 
 local function target_box()
@@ -102,13 +122,15 @@ local function enter()
   end
   holding = false
   hl.exec_cmd(o.shell_quote(CLICK) .. " --daemon")
+  local cols, rows, fine = read_grid()
   state.bx, state.by, state.bw, state.bh = bx, by, bw, bh
-  state.cw = bw / COLS
-  state.ch = bh / ROWS
+  state.cw = bw / cols
+  state.ch = bh / rows
+  state.fine = fine
   local cx = bx + bw / 2
   local cy = by + bh / 2
-  local col = clamp(math.floor((cx - bx) / state.cw), 0, COLS - 1)
-  local row = clamp(math.floor((cy - by) / state.ch), 0, ROWS - 1)
+  local col = clamp(math.floor((cx - bx) / state.cw), 0, cols - 1)
+  local row = clamp(math.floor((cy - by) / state.ch), 0, rows - 1)
   show_cursor()
   warp(bx + (col + 0.5) * state.cw, by + (row + 0.5) * state.ch)
   hl.dispatch(hl.dsp.submap("mousegrid"))
@@ -158,9 +180,10 @@ local function step_fine(dx, dy)
   local maxx = state.bx + state.bw - 2
   local miny = state.by + 2
   local maxy = state.by + state.bh - 2
+  local step = state.fine or DEFAULT_FINE
   warp(
-    clamp(state.x + dx * FINE, minx, maxx),
-    clamp(state.y + dy * FINE, miny, maxy)
+    clamp(state.x + dx * step, minx, maxx),
+    clamp(state.y + dy * step, miny, maxy)
   )
 end
 
