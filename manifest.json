@@ -12,7 +12,7 @@
   "keepLoaded": true,
   "entryPoints": {
     "barWidget": "Panel.qml",
-    "overlay": "GridPicker.qml"
+    "overlay": "Overlay.qml"
   },
   "barWidget": {
     "displayName": "Mousegrid",

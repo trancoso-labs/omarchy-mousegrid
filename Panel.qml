@@ -2,11 +2,9 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-Panel {
+BarWidget {
   id: root
   moduleName: "3v4ng3li0n00.mousegrid"
-  ipcTarget: "3v4ng3li0n00.mousegrid"
-  manageIpc: false
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
