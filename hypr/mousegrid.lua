@@ -1,5 +1,5 @@
 -- Keyboard pointer: lattice on the focused window, no drawn overlay.
--- SUPER+A enters; arrows jump cells; another arrow on the last cell scrolls.
+-- SUPER+A enters; arrows jump cells; two arrows snap to a cell quarter.
 -- Space holds the left button (release = release; tap = click).
 -- SUPER+Space also holds, so fine aim and drag can overlap.
 -- Grid sizes live in ~/.config/omarchy/mousegrid.json (picker overlay).
@@ -18,6 +18,8 @@ local state = {
   bh = 0,
   cw = 0,
   ch = 0,
+  cols = 6,
+  rows = 4,
   fine = 12,
   x = 0,
   y = 0,
@@ -126,6 +128,8 @@ local function enter()
   state.bx, state.by, state.bw, state.bh = bx, by, bw, bh
   state.cw = bw / cols
   state.ch = bh / rows
+  state.cols = cols
+  state.rows = rows
   state.fine = fine
   local cx = bx + bw / 2
   local cy = by + bh / 2
@@ -176,8 +180,62 @@ local function step_or_scroll(nx, ny, dx, dy)
   warp(nx, ny)
 end
 
+local function key_held(name)
+  local ok, down = pcall(hl.is_key_down, name)
+  return ok and down == true
+end
+
+local function chord_axis(pressed, negative, positive)
+  if pressed ~= 0 then
+    return pressed
+  end
+  if key_held(negative) then
+    return -1
+  end
+  if key_held(positive) then
+    return 1
+  end
+  return 0
+end
+
+-- Two arrows at once land on the matching quarter of the current coarse cell.
+-- Another press of the same pair jumps to that quarter of the next cell.
+local last_quarter_at = 0
+local function step_quarter(dx, dy)
+  local cols = state.cols or 6
+  local rows = state.rows or 4
+  local col = clamp(math.floor((state.x - state.bx) / state.cw), 0, cols - 1)
+  local row = clamp(math.floor((state.y - state.by) / state.ch), 0, rows - 1)
+  local function center(c, r)
+    local ox = state.bx + c * state.cw
+    local oy = state.by + r * state.ch
+    local qx = dx > 0 and 1 or 0
+    local qy = dy > 0 and 1 or 0
+    return ox + (qx + 0.5) * (state.cw / 2), oy + (qy + 0.5) * (state.ch / 2)
+  end
+  local tx, ty = center(col, row)
+  local near = (state.cw * 0.18) ^ 2
+  if (tx - state.x) ^ 2 + (ty - state.y) ^ 2 < near then
+    col = clamp(col + dx, 0, cols - 1)
+    row = clamp(row + dy, 0, rows - 1)
+    tx, ty = center(col, row)
+  end
+  step_or_scroll(tx, ty, dx, dy)
+end
+
 local function step_coarse(dx, dy)
   if state.cw <= 0 or state.ch <= 0 then
+    return
+  end
+  local hx = chord_axis(dx, "Left", "Right")
+  local hy = chord_axis(dy, "Up", "Down")
+  if hx ~= 0 and hy ~= 0 then
+    local now = os.clock()
+    if now - last_quarter_at < 0.04 then
+      return
+    end
+    last_quarter_at = now
+    step_quarter(hx, hy)
     return
   end
   local minx = state.bx + state.cw / 2
