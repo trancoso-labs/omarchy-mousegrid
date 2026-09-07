@@ -1,5 +1,5 @@
 -- Keyboard pointer: lattice on the focused window, no drawn overlay.
--- SUPER+A enters; arrows jump cells; SUPER+arrows nudge; Enter clicks and leaves.
+-- SUPER+A enters; arrows jump cells; another arrow on the last cell scrolls.
 -- Space holds the left button (release = release; tap = click).
 -- SUPER+Space also holds, so fine aim and drag can overlap.
 -- Grid sizes live in ~/.config/omarchy/mousegrid.json (picker overlay).
@@ -158,6 +158,24 @@ local function leave()
   hl.dispatch(hl.dsp.submap("reset"))
 end
 
+local function scroll(dx, dy)
+  pointer(string.format("scroll %d %d", dx, dy))
+end
+
+local function step_or_scroll(nx, ny, dx, dy)
+  local px = math.floor(nx + 0.5)
+  local py = math.floor(ny + 0.5)
+  local cx = math.floor(state.x + 0.5)
+  local cy = math.floor(state.y + 0.5)
+  if px == cx and py == cy then
+    if not holding then
+      scroll(dx, dy)
+    end
+    return
+  end
+  warp(nx, ny)
+end
+
 local function step_coarse(dx, dy)
   if state.cw <= 0 or state.ch <= 0 then
     return
@@ -166,9 +184,11 @@ local function step_coarse(dx, dy)
   local maxx = state.bx + state.bw - state.cw / 2
   local miny = state.by + state.ch / 2
   local maxy = state.by + state.bh - state.ch / 2
-  warp(
+  step_or_scroll(
     clamp(state.x + dx * state.cw, minx, maxx),
-    clamp(state.y + dy * state.ch, miny, maxy)
+    clamp(state.y + dy * state.ch, miny, maxy),
+    dx,
+    dy
   )
 end
 
@@ -181,9 +201,11 @@ local function step_fine(dx, dy)
   local miny = state.by + 2
   local maxy = state.by + state.bh - 2
   local step = state.fine or DEFAULT_FINE
-  warp(
+  step_or_scroll(
     clamp(state.x + dx * step, minx, maxx),
-    clamp(state.y + dy * step, miny, maxy)
+    clamp(state.y + dy * step, miny, maxy),
+    dx,
+    dy
   )
 end
 

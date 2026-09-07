@@ -15,7 +15,7 @@ Hyprland Lua plus a small `/dev/uinput` helper.
 
 | Key | Action |
 |-----|--------|
-| arrows | Jump cell to cell (size from the picker) |
+| arrows | Jump cell to cell; one more press on the last cell scrolls |
 | `SUPER` + arrows | Fine move (step from the picker) |
 | `Enter` | Left click and leave |
 | `Space` (hold) | Hold left button — drag / select |
