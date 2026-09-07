@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Virtual pointer clicks via /dev/uinput. Daemon + client for Hyprland mousegrid."""
+
+from __future__ import annotations
+
+import os
+import select
+import socket
+import struct
+import subprocess
+import sys
+import time
+
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+SOCK_PATH = os.path.join(RUNTIME, "mousegrid-click.sock")
+FIFO_PATH = os.path.join(RUNTIME, "mousegrid-click.fifo")
+PID_PATH = os.path.join(RUNTIME, "mousegrid-click.pid")
+
+EV_SYN, EV_KEY, EV_REL = 0, 1, 2
+SYN_REPORT = 0
+BTN = {"left": 0x110, "right": 0x111, "middle": 0x112}
+REL_X, REL_Y = 0, 1
+UI_SET_EVBIT = 0x40045564
+UI_SET_KEYBIT = 0x40045565
+UI_SET_RELBIT = 0x40045566
+UI_DEV_CREATE = 0x5501
+UI_DEV_DESTROY = 0x5502
+UINPUT_MAX_NAME_SIZE = 80
+ABS_CNT = 0x40
+BUS_VIRTUAL = 0x06
+
+
+def emit(fd: int, typ: int, code: int, value: int) -> None:
+    os.write(fd, struct.pack("llHHi", 0, 0, typ, code, value))
+
+
+def open_device() -> int:
+    fd = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
+    import fcntl
+
+    fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
+    fcntl.ioctl(fd, UI_SET_EVBIT, EV_REL)
+    fcntl.ioctl(fd, UI_SET_EVBIT, EV_SYN)
+    for code in BTN.values():
+        fcntl.ioctl(fd, UI_SET_KEYBIT, code)
+    fcntl.ioctl(fd, UI_SET_RELBIT, REL_X)
+    fcntl.ioctl(fd, UI_SET_RELBIT, REL_Y)
+    udev = bytearray(UINPUT_MAX_NAME_SIZE + 8 + 4 + ABS_CNT * 4 * 4)
+    udev[0:9] = b"mousegrid"
+    struct.pack_into("HHHH", udev, 80, BUS_VIRTUAL, 0, 0, 1)
+    os.write(fd, udev)
+    fcntl.ioctl(fd, UI_DEV_CREATE)
+    time.sleep(0.25)
+    return fd
+
+
+def close_device(fd: int) -> None:
+    import fcntl
+
+    try:
+        fcntl.ioctl(fd, UI_DEV_DESTROY)
+    except OSError:
+        pass
+    os.close(fd)
+
+
+def syn(fd: int) -> None:
+    emit(fd, EV_SYN, SYN_REPORT, 0)
+
+
+def button_set(fd: int, button: str, pressed: bool, held: dict[str, bool]) -> None:
+    want = bool(pressed)
+    if held.get(button) == want:
+        return
+    emit(fd, EV_KEY, BTN[button], 1 if want else 0)
+    syn(fd)
+    held[button] = want
+
+
+def rel_move(fd: int, dx: int, dy: int) -> None:
+    if dx:
+        emit(fd, EV_REL, REL_X, dx)
+    if dy:
+        emit(fd, EV_REL, REL_Y, dy)
+    if dx or dy:
+        syn(fd)
+
+
+def click(fd: int, button: str, held: dict[str, bool]) -> None:
+    button_set(fd, button, True, held)
+    time.sleep(0.02)
+    button_set(fd, button, False, held)
+
+
+def parse_command(line: str) -> tuple[str, list[str]]:
+    parts = line.split()
+    if not parts:
+        return "", []
+    return parts[0], parts[1:]
+
+
+def handle_command(fd: int, line: str, held: dict[str, bool]) -> str:
+    cmd, args = parse_command(line)
+    if cmd in ("", "ping"):
+        return "ok" if cmd else "err unknown"
+    if cmd == "quit":
+        return "quit"
+    if cmd in BTN:
+        click(fd, cmd, held)
+        return "ok"
+    if cmd in ("down", "up"):
+        button = args[0] if args else "left"
+        if button not in BTN:
+            return "err unknown"
+        button_set(fd, button, cmd == "down", held)
+        return "ok"
+    if cmd == "move":
+        if len(args) < 2:
+            return "err unknown"
+        rel_move(fd, int(args[0]), int(args[1]))
+        return "ok"
+    return "err unknown"
+
+
+def already_running() -> bool:
+    if not os.path.exists(SOCK_PATH):
+        return False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.2)
+            sock.connect(SOCK_PATH)
+            sock.sendall(b"ping\n")
+            return sock.makefile().readline().strip() == "ok"
+    except OSError:
+        return False
+
+
+def daemonize() -> None:
+    if os.fork() > 0:
+        os._exit(0)
+    os.setsid()
+    if os.fork() > 0:
+        os._exit(0)
+    os.chdir("/")
+    devnull = os.open(os.devnull, os.O_RDWR)
+    os.dup2(devnull, 0)
+    os.dup2(devnull, 1)
+    os.dup2(devnull, 2)
+    if devnull > 2:
+        os.close(devnull)
+
+
+def run_daemon() -> int:
+    if already_running():
+        return 0
+    daemonize()
+    try:
+        os.unlink(SOCK_PATH)
+    except FileNotFoundError:
+        pass
+
+    fd = open_device()
+    held = {name: False for name in BTN}
+    fifo_fd = None
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(SOCK_PATH)
+    os.chmod(SOCK_PATH, 0o600)
+    server.listen(4)
+    try:
+        os.unlink(FIFO_PATH)
+    except FileNotFoundError:
+        pass
+    os.mkfifo(FIFO_PATH, 0o600)
+    fifo_fd = os.open(FIFO_PATH, os.O_RDWR | os.O_NONBLOCK)
+    with open(PID_PATH, "w", encoding="utf-8") as pidfile:
+        pidfile.write(str(os.getpid()))
+
+    fifo_buf = b""
+    try:
+        while True:
+            ready, _, _ = select.select([server, fifo_fd], [], [])
+            if fifo_fd in ready:
+                chunk = os.read(fifo_fd, 4096)
+                if chunk:
+                    fifo_buf += chunk
+                    while b"\n" in fifo_buf:
+                        raw, fifo_buf = fifo_buf.split(b"\n", 1)
+                        line = raw.decode("utf-8", "replace").strip()
+                        if not line:
+                            continue
+                        try:
+                            result = handle_command(fd, line, held)
+                        except (OSError, ValueError) as exc:
+                            result = f"err {exc}"
+                        if result == "quit":
+                            for button in list(BTN):
+                                button_set(fd, button, False, held)
+                            return 0
+            if server in ready:
+                conn, _ = server.accept()
+                with conn:
+                    line = conn.makefile().readline().strip()
+                    try:
+                        result = handle_command(fd, line, held)
+                    except (OSError, ValueError) as exc:
+                        result = f"err {exc}"
+                    if result == "quit":
+                        conn.sendall(b"ok\n")
+                        for button in list(BTN):
+                            button_set(fd, button, False, held)
+                        return 0
+                    conn.sendall((result + "\n").encode())
+    finally:
+        for button in list(BTN):
+            try:
+                button_set(fd, button, False, held)
+            except OSError:
+                pass
+        close_device(fd)
+        server.close()
+        if fifo_fd is not None:
+            os.close(fifo_fd)
+        for path in (SOCK_PATH, FIFO_PATH, PID_PATH):
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+    return 0
+
+
+def spawn_daemon() -> None:
+    subprocess.Popen(
+        [sys.argv[0], "--daemon"],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(40):
+        if already_running():
+            return
+        time.sleep(0.05)
+    raise SystemExit("mousegrid-click: daemon did not start")
+
+
+def send(command: str) -> None:
+    if not already_running():
+        spawn_daemon()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(1.0)
+        sock.connect(SOCK_PATH)
+        sock.sendall((command + "\n").encode())
+        reply = sock.makefile().readline().strip()
+    if reply != "ok":
+        raise SystemExit(reply or "mousegrid-click: no reply")
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if args == ["--daemon"]:
+        return run_daemon()
+    if not args:
+        print("usage: mousegrid-click left|right|middle|down|up|move dx dy | --daemon", file=sys.stderr)
+        return 2
+    send(" ".join(args))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except FileNotFoundError as exc:
+        print(f"mousegrid-click: {exc}", file=sys.stderr)
+        raise SystemExit(1)

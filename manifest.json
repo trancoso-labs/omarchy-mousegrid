@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "3v4ng3li0n00.mousegrid",
+  "name": "Mousegrid",
+  "version": "1.0.0",
+  "author": "Igor Trancoso",
+  "description": "Keyboard pointer: 6×4 lattice on the focused window",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Mousegrid",
+    "description": "Point and click with the keyboard on the focused window",
+    "category": "Compositor",
+    "allowMultiple": false
+  }
+}
