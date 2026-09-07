@@ -23,6 +23,7 @@ Hyprland Lua plus a small `/dev/uinput` helper.
 | tap `Space` | Left click and stay in the mode |
 | `Shift` + `Enter` | Right click and leave |
 | `Esc` or `SUPER+A` | Leave without clicking |
+| `SUPER`+1–0, Tab, scratchpad, monitor | Leave, then the Omarchy screen action |
 
 After a click the mode exits, so the app gets the keyboard: type in the field
 you just focused, arrow-scroll the page you just clicked, follow the link.

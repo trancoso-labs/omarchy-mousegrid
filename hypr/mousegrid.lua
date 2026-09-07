@@ -283,4 +283,40 @@ hl.define_submap("mousegrid", function()
   end)
   map("ESCAPE", "Leave mousegrid", leave)
   map("SUPER + A", "Leave mousegrid", leave)
+
+  -- Screen/workspace combos leave the mode, then run the Omarchy action.
+  -- Super+arrows stay as fine aim and are not included.
+  local function escape_then(dispatcher)
+    return function()
+      leave()
+      hl.dispatch(dispatcher)
+    end
+  end
+
+  for workspace = 1, 10 do
+    local number_key = "code:" .. tostring(workspace + 9)
+    map("SUPER + " .. number_key, "Leave mousegrid, workspace " .. workspace, escape_then(hl.dsp.focus({ workspace = tostring(workspace) })))
+    map("SUPER + SHIFT + " .. number_key, "Leave mousegrid, move to workspace " .. workspace, escape_then(hl.dsp.window.move({ workspace = tostring(workspace) })))
+    map("SUPER + SHIFT + ALT + " .. number_key, "Leave mousegrid, send to workspace " .. workspace, escape_then(hl.dsp.window.move({ workspace = tostring(workspace), follow = false })))
+  end
+
+  local numpad = { 87, 88, 89, 83, 84, 85, 79, 80, 81, 90 }
+  for workspace, code in ipairs(numpad) do
+    local key = "code:" .. tostring(code)
+    map("SUPER + " .. key, "Leave mousegrid, workspace " .. workspace, escape_then(hl.dsp.focus({ workspace = tostring(workspace) })))
+    map("SUPER + SHIFT + " .. key, "Leave mousegrid, move to workspace " .. workspace, escape_then(hl.dsp.window.move({ workspace = tostring(workspace) })))
+    map("SUPER + SHIFT + ALT + " .. key, "Leave mousegrid, send to workspace " .. workspace, escape_then(hl.dsp.window.move({ workspace = tostring(workspace), follow = false })))
+  end
+
+  map("SUPER + TAB", "Leave mousegrid, next workspace", escape_then(hl.dsp.focus({ workspace = "e+1" })))
+  map("SUPER + SHIFT + TAB", "Leave mousegrid, previous workspace", escape_then(hl.dsp.focus({ workspace = "e-1" })))
+  map("SUPER + CTRL + TAB", "Leave mousegrid, former workspace", escape_then(hl.dsp.focus({ workspace = "previous" })))
+  map("CTRL + ALT + TAB", "Leave mousegrid, next monitor", escape_then(hl.dsp.focus({ monitor = "+1" })))
+  map("CTRL + ALT + SHIFT + TAB", "Leave mousegrid, previous monitor", escape_then(hl.dsp.focus({ monitor = "-1" })))
+  map("SUPER + S", "Leave mousegrid, scratchpad", escape_then(hl.dsp.workspace.toggle_special("scratchpad")))
+  map("SUPER + ALT + S", "Leave mousegrid, send to scratchpad", escape_then(hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })))
+  map("SUPER + SHIFT + ALT + LEFT", "Leave mousegrid, workspace to left monitor", escape_then(hl.dsp.workspace.move({ monitor = "l" })))
+  map("SUPER + SHIFT + ALT + RIGHT", "Leave mousegrid, workspace to right monitor", escape_then(hl.dsp.workspace.move({ monitor = "r" })))
+  map("SUPER + SHIFT + ALT + UP", "Leave mousegrid, workspace to up monitor", escape_then(hl.dsp.workspace.move({ monitor = "u" })))
+  map("SUPER + SHIFT + ALT + DOWN", "Leave mousegrid, workspace to down monitor", escape_then(hl.dsp.workspace.move({ monitor = "d" })))
 end)
