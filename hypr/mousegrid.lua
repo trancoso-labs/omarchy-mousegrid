@@ -162,6 +162,38 @@ local function leave()
   hl.dispatch(hl.dsp.submap("reset"))
 end
 
+local function grim_region(x, y, w, h)
+  w = math.max(1, math.floor(w + 0.5))
+  h = math.max(1, math.floor(h + 0.5))
+  x = math.floor(x + 0.5)
+  y = math.floor(y + 0.5)
+  local geom = string.format("%d,%d %dx%d", x, y, w, h)
+  local home = os.getenv("HOME") or ""
+  local pictures = os.getenv("XDG_PICTURES_DIR") or (home .. "/Pictures")
+  local file = pictures .. "/screenshot-" .. os.date("%Y-%m-%d_%H-%M-%S") .. ".png"
+  hl.exec_cmd(
+    "mkdir -p " .. o.shell_quote(pictures)
+      .. " && grim -g " .. o.shell_quote(geom) .. " " .. o.shell_quote(file)
+      .. " && wl-copy --type image/png < " .. o.shell_quote(file)
+      .. " && omarchy-notification-send Screenshot " .. o.shell_quote(file)
+  )
+end
+
+local function screenshot_cell()
+  if state.cw <= 0 or state.ch <= 0 then
+    return
+  end
+  local cols = state.cols or 6
+  local rows = state.rows or 4
+  local col = clamp(math.floor((state.x - state.bx) / state.cw), 0, cols - 1)
+  local row = clamp(math.floor((state.y - state.by) / state.ch), 0, rows - 1)
+  grim_region(state.bx + col * state.cw, state.by + row * state.ch, state.cw, state.ch)
+end
+
+local function screenshot_window()
+  grim_region(target_box())
+end
+
 local function scroll(dx, dy)
   pointer(string.format("scroll %d %d", dx, dy))
 end
@@ -293,6 +325,17 @@ end)
 
 o.bind("SUPER + A", "Mousegrid", enter)
 
+-- PrintScreen: enter the grid to aim, or capture the current cell if already in it.
+-- Omarchy's default PRINT starts slurp, which steals unmodified arrows.
+hl.unbind("PRINT")
+o.bind("PRINT", "Mousegrid screenshot", function()
+  if hl.get_current_submap() == "mousegrid" then
+    screenshot_cell()
+  else
+    enter()
+  end
+end)
+
 -- Submap binds go through hl.bind. Bind arrows by X keycode: Omarchy's
 -- PrintScreen slurp temporarily binds LEFT/RIGHT/UP/DOWN/RETURN by keysym
 -- and unbinding those handles also wiped the mousegrid copies.
@@ -342,10 +385,9 @@ hl.define_submap("mousegrid", function()
   end)
   map("ESCAPE", "Leave mousegrid", leave)
   map("SUPER + A", "Leave mousegrid", leave)
-  map("PRINT", "Leave mousegrid, screenshot", function()
-    leave()
-    hl.exec_cmd("omarchy-capture-screenshot")
-  end)
+  -- Stay in the mode: PrintScreen must not start slurp, or arrows leave the grid.
+  map("PRINT", "Mousegrid screenshot cell", screenshot_cell)
+  map("SHIFT + PRINT", "Mousegrid screenshot window", screenshot_window)
 
   -- Screen/workspace combos leave the mode, then run the Omarchy action.
   -- Super+arrows stay as fine aim and are not included.

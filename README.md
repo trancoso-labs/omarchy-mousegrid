@@ -23,6 +23,8 @@ Hyprland Lua plus a small `/dev/uinput` helper.
 | `SUPER` + `Space` | Same hold, so fine-aim and drag can overlap |
 | tap `Space` | Left click and stay in the mode |
 | `Shift` + `Enter` | Right click and leave |
+| `PrintScreen` | Enter the grid to aim, or capture the current cell (no slurp) |
+| `Shift` + `PrintScreen` | Capture the focused window |
 | `Esc` or `SUPER+A` | Leave without clicking |
 | `SUPER`+1–0, Tab, scratchpad, monitor | Leave, then the Omarchy screen action |
 
