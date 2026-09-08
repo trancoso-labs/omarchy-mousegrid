@@ -293,8 +293,9 @@ end)
 
 o.bind("SUPER + A", "Mousegrid", enter)
 
--- Submap binds go through hl.bind. o.bind dropped unmodified LEFT/RETURN
--- here after reload, so arrows entered the mode and then did nothing.
+-- Submap binds go through hl.bind. Bind arrows by X keycode: Omarchy's
+-- PrintScreen slurp temporarily binds LEFT/RIGHT/UP/DOWN/RETURN by keysym
+-- and unbinding those handles also wiped the mousegrid copies.
 local function map(keys, description, fn, opts)
   opts = opts or {}
   opts.description = description
@@ -302,16 +303,16 @@ local function map(keys, description, fn, opts)
 end
 
 hl.define_submap("mousegrid", function()
-  map("LEFT", "Mousegrid cell left", function()
+  map("code:113", "Mousegrid cell left", function()
     step_coarse(-1, 0)
   end, { repeating = true })
-  map("RIGHT", "Mousegrid cell right", function()
+  map("code:114", "Mousegrid cell right", function()
     step_coarse(1, 0)
   end, { repeating = true })
-  map("UP", "Mousegrid cell up", function()
+  map("code:111", "Mousegrid cell up", function()
     step_coarse(0, -1)
   end, { repeating = true })
-  map("DOWN", "Mousegrid cell down", function()
+  map("code:116", "Mousegrid cell down", function()
     step_coarse(0, 1)
   end, { repeating = true })
 
@@ -328,7 +329,7 @@ hl.define_submap("mousegrid", function()
     step_fine(0, 1)
   end, { repeating = true })
 
-  map("RETURN", "Mousegrid click and leave", function()
+  map("code:36", "Mousegrid click and leave", function()
     click("left", true)
   end)
   -- Fine aim holds Super, so Space arrives as SUPER+SPACE.
@@ -341,6 +342,10 @@ hl.define_submap("mousegrid", function()
   end)
   map("ESCAPE", "Leave mousegrid", leave)
   map("SUPER + A", "Leave mousegrid", leave)
+  map("PRINT", "Leave mousegrid, screenshot", function()
+    leave()
+    hl.exec_cmd("omarchy-capture-screenshot")
+  end)
 
   -- Screen/workspace combos leave the mode, then run the Omarchy action.
   -- Super+arrows stay as fine aim and are not included.
