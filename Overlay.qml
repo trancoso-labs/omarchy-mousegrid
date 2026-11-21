@@ -23,7 +23,7 @@ Item {
   readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/mousegrid.json"
 
   property color foreground: Color.imagePicker ? Color.imagePicker.text : Color.menu.text
-  property color scrim: Color.imagePicker ? Color.imagePicker.scrim : Color.menu.scrim
+  property color scrim: Color.composed("image-picker.scrim", "image-picker.scrim-alpha", Color.background, 0.5)
   property color selectedBorder: Color.imagePicker ? Color.imagePicker.selectedBorder : Color.accent
   property color unselectedBorder: Color.imagePicker ? Color.imagePicker.unselectedBorder : Color.menu.border
 
@@ -181,12 +181,13 @@ Item {
         }
       }
 
+      MouseArea { anchors.fill: options; onClicked: {} }
+
       Column {
+        id: options
         anchors.centerIn: parent
         spacing: Style.space(28)
         width: Math.min(parent.width - 80, 920)
-
-        MouseArea { anchors.fill: parent; onClicked: {} }
 
         Text {
           anchors.horizontalCenter: parent.horizontalCenter
